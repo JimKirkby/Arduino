@@ -1,0 +1,126 @@
+/*
+This code feeds Initial State with data from Aruino pins.
+
+ created 2 Dec 2006
+ by David A. Mellis
+ modified extensively 13 Jan 2016
+ by Jim Kirkby
+
+
+ */
+
+//-----Includes-----//
+#include <SPI.h>
+#include <Ethernet.h>
+#include <Wire.h>
+#include <Process.h>
+//----Ethernet Setup----//
+byte mac[] = {
+  0x90, 0xA2, 0xDA, 0x0D, 0xD5, 0xB6
+};
+IPAddress dnServer(192, 168, 3, 1);
+IPAddress gateway(192, 168, 3, 1);
+IPAddress subnet(255, 255, 255, 0);
+IPAddress ip(192, 168, 3, 250);
+//----Define Variables ---//
+#define ISDestURL "https://groker.initialstate.com/api/events"
+//----Bucket key----//
+#define bucketKey "wio-ifttt"
+//----Bucket name----//
+#define bucketName "Arduino1"
+//----Access key----//
+String accessKey ="6UwVem6AFDvJ06bcuNkckcKl3SvhKByT"; //<--- Key for wio-ifttt bucket //
+//----How many signals in the stream? used to control loop----//
+const int NUM_SIGNALS = 3;
+//----Signal Names----//
+//----This array is to store our signal data later----//
+String signalName[NUM_SIGNALS] = {"Power", "Kwh", "Temp"};
+String signalData[NUM_SIGNALS];
+//----Naming analog inputs for signals----//
+const int redPin = A0;    // sensor to read pin Analog 0
+const int greenPin = A1;  // sensor to read pin Analog 1
+const int bluePin = A2;   // sensor to read pin Analog 2
+
+//------------------------------SETUP----------------------------//
+void setup(void)
+{
+  Serial.begin(9600);
+  Ethernet.begin(mac, ip, dnServer, gateway, subnet);
+  Wire.begin();
+
+  //print out the IP address
+ // Wire.begin();
+  Serial.print("IP = ");
+  Serial.println(Ethernet.localIP());
+}
+
+//------------------------------LOOP----------------------------//
+void loop()
+{
+//----wait 10 seconds----//
+  delay(10000);
+  postData();
+}
+//----Write data to Ethernet----//
+void postData()
+{
+  EthernetClient client2;
+
+  long xx, yy;
+  signalData[0] = (analogRead(redPin));
+  signalData[1] = (analogRead(greenPin));
+  signalData[2] = (analogRead(bluePin));
+
+  if (client2.connect("insecure-groker.initialstate.com", 80))
+  {
+
+ //----Assemble Json POST Data----//
+    String toSend = "POST /api/events HTTP/1.1\r\n";
+    toSend += "Host: "ISDestURL"\r\n";
+    toSend += "Content-Type: application/json\r\n";
+    toSend += "User-Agent: Arduino\r\n";
+    toSend += "Accept-Version: ~0\r\n";
+    toSend += "X-IS-AccessKey:  " + accessKey + "\r\n";
+    toSend += "X-IS-BucketKey:  " bucketKey "\r\n";
+//----This loop counts through Number of Signals----//
+//----appends signal data to payload----//
+    String payload = "[";
+
+    for (int i=0; i<NUM_SIGNALS; i++)
+  {
+    payload += "{\"key\": \"" + signalName[i] + "\", \"value\": \"" + signalData[i] + "\"}";
+
+    if (i != NUM_SIGNALS - 1)
+    {
+      payload += ",";
+    }
+  }
+
+  payload += "]";
+    payload += "\r\n";
+//----Completes signal payload above----//
+//----final Payload below----//
+    toSend += "Content-Length: " + String(payload.length()) + "\r\n";
+    toSend += "\r\n";
+    toSend += payload;
+
+    xx = toSend.length();
+
+    for ( yy = 0; yy < xx; yy++)
+    {
+//----Send payload (toSend) to Ethernet and write to serial monitor----//
+      client2.write(toSend[yy]);
+      Serial.print(toSend[yy]);
+    }
+    client2.stop();
+    Serial.println("Data sent");
+
+  }
+
+  else
+  {
+    Serial.println("POST DATA: Cannot connect to Server");
+  }
+
+}
+//----End of loop an routine postData routine----//
